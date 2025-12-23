@@ -21,12 +21,11 @@ void setup() {
 
 void draw() {
   // Drain buffer and use only the most recent value
-  // Arduino sends data every 1ms but Processing only reads ~60 times per second
-  // Using a while loop instead of a conditional ensures we're not reading from a stale and growing buffer
+  // The arduino may send more to the buffer than Processing can read in its loop.
+  // Using a while loop instead of a conditional ensures that we're not 
   while(myPort.available() > 0){
     bgcolor = myPort.read();
   }
-  println(bgcolor);
   background(bgcolor, 255, 255);
   image(logo, 0, 0);
 }
