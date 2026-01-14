@@ -1,3 +1,8 @@
+// To run this script from the automated_blinds dir using arduino cli
+// arduino-cli compile --fqbn esp32:esp32:esp32 uart_connection_test/uart_connection_test.ino
+// arduino-cli upload -p /dev/cu.usbserial-0001 --fqbn esp32:esp32:esp32 uart_connection_test/uart_connection_test.ino
+// arduino-cli monitor -p /dev/cu.usbserial-0001 --config baudrate=115200
+
 #include <Arduino.h>
 #include <TMCStepper.h>
 
