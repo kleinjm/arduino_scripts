@@ -13,19 +13,24 @@ esphome:
   name: blind-right-1
   friendly_name: Blind Right 1
   on_boot:
-    priority: -10.0
+    priority: -100.0
     then:
+      - delay: 5s
       - tmc2209.configure:
           id: blind_motor
           microsteps: 16
           interpolation: true
       - tmc2209.stallguard:
           id: blind_motor
-          threshold: 100
+          threshold: 120 # Slightly higher to prevent ghost stalls
       - tmc2209.currents:
           id: blind_motor
-          irun: 18 # Increased slightly from 16 to 18 (~700mA) for better starting torque
-          ihold: 4 # Reduced current when not moving to prevent heat
+          irun: 20 # Increased to ~800mA for guaranteed movement
+          ihold: 5
+      # Ensure the stepper state is cleared and ready for commands
+      - stepper.set_target:
+          id: blind_motor
+          target: 0
 
 external_components:
   - source: github://slimcdk/esphome-custom-components@master
@@ -36,7 +41,6 @@ esp32:
   framework:
     type: arduino
 
-# Web Server for manual control/diagnostics
 web_server:
   port: 80
 
@@ -51,6 +55,8 @@ wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
   fast_connect: true
+  power_save_mode: NONE
+  output_power: 18.5dBm
 
 uart:
   id: bus_tmc
@@ -69,20 +75,24 @@ stepper:
     dir_pin: GPIO14
     enn_pin:
       number: GPIO13
-      inverted: true # Most TMC2209 boards are Enable-Low
+      inverted: false # Changed from true to test if your board is active-high or active-low
     diag_pin:
       number: GPIO25
       mode: INPUT_PULLDOWN
     max_speed: 400 steps/s
     acceleration: 100 steps/s^2
     on_stall:
-      - logger.log: "STALL DETECTED - Stopping Motor"
-      - stepper.stop: blind_motor
+      # Only stop if we are actually moving; prevents "ghost stalls" at boot
+      lambda: |-
+        if (id(blind_motor).current_position != id(blind_motor).target_position) {
+          ESP_LOGW("tmc2209", "STALL DETECTED - Stopping Motor");
+          id(blind_motor).stop();
+        }
 
 globals:
   - id: blind_max_pos
     type: int
-    initial_value: "5000" # Adjust this to the total travel of your blinds
+    initial_value: "5000"
     restore_value: yes
 
 cover:
@@ -115,7 +125,6 @@ script:
   - id: find_home
     then:
       - logger.log: "Homing Sequence Started..."
-      # Move "up" until a stall is detected
       - stepper.set_target:
           id: blind_motor
           target: -100000
@@ -142,3 +151,10 @@ button:
           id: blind_max_pos
           value: !lambda "return id(blind_motor).current_position;"
       - logger.log: "Max position updated and saved to flash."
+
+  - platform: template
+    name: "Manual Step Forward"
+    on_press:
+      - stepper.set_target:
+          id: blind_motor
+          target: !lambda "return id(blind_motor).current_position + 400;"
