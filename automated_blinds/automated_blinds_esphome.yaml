@@ -1,36 +1,20 @@
-# To run this script via the esphome cli
-# esphome run automated_blinds_esphome.yaml
-# esphome logs automated_blinds_esphome.yaml
-#
-# Then visit
-# http://tmc_test_node.local/
-#
-# Note: You can upload this script overridding any previous one of any format,
-# ie. a .ino file. You only need to reflash via https://web.esphome.io/ if there
-# are driver issues or this is the first ever install on the chip.
-
+# Automated Blinds - ESPHome config with StallGuard
 esphome:
   name: blind-right-1
-  friendly_name: Blind Right 1
   on_boot:
     priority: -100.0
     then:
-      - delay: 5s
+      - logger.log: "Configuring TMC2209..."
+      - tmc2209.currents:
+          id: blind_motor
+          run_current: 1000mA   # Good torque for blinds
+          hold_current: 400mA
       - tmc2209.configure:
           id: blind_motor
           microsteps: 16
-          interpolation: true
-      - tmc2209.stallguard:
-          id: blind_motor
-          threshold: 120 # Slightly higher to prevent ghost stalls
-      - tmc2209.currents:
-          id: blind_motor
-          irun: 20 # Increased to ~800mA for guaranteed movement
-          ihold: 5
-      # Ensure the stepper state is cleared and ready for commands
-      - stepper.set_target:
-          id: blind_motor
-          target: 0
+          enable_spreadcycle: false  # StealthChop for quiet operation
+      - delay: 100ms
+      - logger.log: "Motor configured - Ready (time-based homing)"
 
 external_components:
   - source: github://slimcdk/esphome-custom-components@master
@@ -41,22 +25,21 @@ esp32:
   framework:
     type: arduino
 
-web_server:
-  port: 80
-
 logger:
-  level: DEBUG
-
-api:
-ota:
-  - platform: esphome
+  baud_rate: 115200
 
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
-  fast_connect: true
   power_save_mode: NONE
-  output_power: 18.5dBm
+
+api:
+
+ota:
+  platform: esphome
+
+web_server:
+  port: 80
 
 uart:
   id: bus_tmc
@@ -65,6 +48,7 @@ uart:
   baud_rate: 115200
 
 tmc2209_hub:
+  id: bus_tmc_hub
   uart_id: bus_tmc
 
 stepper:
@@ -73,88 +57,102 @@ stepper:
     address: 0
     step_pin: GPIO27
     dir_pin: GPIO14
-    enn_pin:
-      number: GPIO13
-      inverted: false # Changed from true to test if your board is active-high or active-low
-    diag_pin:
-      number: GPIO25
-      mode: INPUT_PULLDOWN
-    max_speed: 400 steps/s
-    acceleration: 100 steps/s^2
-    on_stall:
-      # Only stop if we are actually moving; prevents "ghost stalls" at boot
-      lambda: |-
-        if (id(blind_motor).current_position != id(blind_motor).target_position) {
-          ESP_LOGW("tmc2209", "STALL DETECTED - Stopping Motor");
-          id(blind_motor).stop();
-        }
+    enn_pin: GPIO13
+    # diag_pin removed - using our own GPIO polling instead
+    max_speed: 800 steps/s  # Higher speed for better StallGuard readings
+    acceleration: 400
+    deceleration: 400
+
+# Time-based homing - run motor until it hits mechanical stop
+# No StallGuard needed - just run for fixed duration
 
 globals:
-  - id: blind_max_pos
+  - id: blind_max_steps
     type: int
-    initial_value: "5000"
-    restore_value: yes
-
-cover:
-  - platform: template
-    name: "Window Blind"
-    id: blind_cover
-    device_class: blind
-    has_position: true
-    lambda: |-
-      float pos = id(blind_motor).current_position;
-      float max_pos = (float)id(blind_max_pos);
-      if (max_pos <= 0) return 0.0;
-      return 1.0 - (pos / max_pos);
-    open_action:
-      - stepper.set_target:
-          id: blind_motor
-          target: 0
-    close_action:
-      - stepper.set_target:
-          id: blind_motor
-          target: !lambda "return id(blind_max_pos);"
-    stop_action:
-      - stepper.stop: blind_motor
-    position_action:
-      - stepper.set_target:
-          id: blind_motor
-          target: !lambda "return (int)(id(blind_max_pos) * (1.0 - pos));"
-
-script:
-  - id: find_home
-    then:
-      - logger.log: "Homing Sequence Started..."
-      - stepper.set_target:
-          id: blind_motor
-          target: -100000
-      - wait_until:
-          condition:
-            lambda: 'return id(blind_motor).current_position == id(blind_motor).target_position;'
-      - stepper.report_position:
-          id: blind_motor
-          position: 0
-      - logger.log: "Homing Complete. Zero Point Set."
+    initial_value: '20000'  # Adjust based on your blind's full travel
+  - id: is_homing
+    type: bool
+    initial_value: 'false'
 
 button:
   - platform: template
-    name: "Recalibrate Home (StallGuard)"
-    icon: "mdi:axis-arrow"
+    name: "Home (Close Fully)"
     on_press:
-      - script.execute: find_home
+      - logger.log: "Homing - slow & gentle toward closed..."
+      - lambda: 'id(is_homing) = true;'
+      # Lower current and speed for gentle homing (less wear on mechanism)
+      - tmc2209.currents:
+          id: blind_motor
+          run_current: 400mA
+          hold_current: 200mA
+      - stepper.set_speed:
+          id: blind_motor
+          speed: 300 steps/s
+      # Run motor backward (toward close) for more steps than full travel
+      - stepper.set_target:
+          id: blind_motor
+          target: -25000  # Negative = toward closed, overshoot to ensure we hit stop
+      # Wait for motor to finish (at 300 steps/s, 25000 steps = ~83 seconds)
+      - delay: 90s
+      - stepper.stop: blind_motor
+      # Reset position AND target to 0 to prevent restart
+      - stepper.report_position:
+          id: blind_motor
+          position: 0
+      - stepper.set_target:
+          id: blind_motor
+          target: 0
+      # Restore normal speed and current for operation
+      - tmc2209.currents:
+          id: blind_motor
+          run_current: 1000mA
+          hold_current: 400mA
+      - stepper.set_speed:
+          id: blind_motor
+          speed: 800 steps/s
+      - lambda: 'id(is_homing) = false;'
+      - logger.log: "Homing complete - restored fast settings"
 
   - platform: template
-    name: "Set Current Position as Closed"
-    icon: "mdi:content-save"
+    name: "Open Fully"
     on_press:
-      - globals.set:
-          id: blind_max_pos
-          value: !lambda "return id(blind_motor).current_position;"
-      - logger.log: "Max position updated and saved to flash."
+      - logger.log: "Opening blinds..."
+      - stepper.set_target:
+          id: blind_motor
+          target: !lambda 'return id(blind_max_steps);'
 
   - platform: template
-    name: "Manual Step Forward"
+    name: "Close Fully"
+    on_press:
+      - logger.log: "Closing blinds..."
+      - stepper.set_target:
+          id: blind_motor
+          target: 0
+
+  - platform: template
+    name: "Stop"
+    on_press:
+      - stepper.stop: blind_motor
+      - lambda: 'id(is_homing) = false;'
+      - logger.log: "Motor stopped"
+
+  - platform: template
+    name: "Open 25%"
     on_press:
       - stepper.set_target:
           id: blind_motor
-          target: !lambda "return id(blind_motor).current_position + 400;"
+          target: !lambda 'return id(blind_max_steps) / 4;'
+
+  - platform: template
+    name: "Open 50%"
+    on_press:
+      - stepper.set_target:
+          id: blind_motor
+          target: !lambda 'return id(blind_max_steps) / 2;'
+
+  - platform: template
+    name: "Open 75%"
+    on_press:
+      - stepper.set_target:
+          id: blind_motor
+          target: !lambda 'return id(blind_max_steps) * 3 / 4;'
