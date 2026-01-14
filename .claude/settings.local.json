@@ -3,7 +3,21 @@
     "allow": [
       "WebFetch(domain:github.com)",
       "Bash(esphome run:*)",
-      "Bash(esphome compile:*)"
+      "Bash(esphome compile:*)",
+      "Bash(brew install:*)",
+      "Bash(arduino-cli core update-index:*)",
+      "Bash(arduino-cli core install:*)",
+      "Bash(arduino-cli lib install:*)",
+      "Bash(arduino-cli compile:*)",
+      "Bash(arduino-cli upload:*)",
+      "Bash(timeout 15 arduino-cli monitor:*)",
+      "Bash(esphome upload:*)",
+      "Bash(esphome logs:*)",
+      "Bash(timeout 5 esphome logs:*)",
+      "Bash(esphome config:*)",
+      "Bash(timeout 8 esphome logs:*)",
+      "Bash(timeout 10 esphome logs:*)",
+      "Bash(timeout 15 esphome logs:*)"
     ]
   }
 }
