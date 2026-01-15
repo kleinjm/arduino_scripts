@@ -25,7 +25,7 @@ ESP32-based motorized blind controller using a TMC2209 stepper driver with UART 
 
 | ESP32 Pin | Function | Connected To |
 |-----------|----------|--------------|
-| GPIO22 | UART TX | TMC2209 PDN/UART |
+| GPIO22 | UART TX | 1K(Ω) -> TMC2209 PDN/UART |
 | GPIO23 | UART RX | TMC2209 PDN/UART |
 | GPIO27 | STEP | TMC2209 STEP |
 | GPIO14 | DIR | TMC2209 DIR |
