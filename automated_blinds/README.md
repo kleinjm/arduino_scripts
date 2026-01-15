@@ -54,26 +54,26 @@ The following values in `automated_blinds_esphome.yaml` can be adjusted for your
 
 ### Movement Range
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `blind_max_steps` | 20000 | Total steps for full blind travel |
+| Parameter | Default | Min | Max | Description |
+|-----------|---------|-----|-----|-------------|
+| `blind_max_steps` | 20000 | 1000 | 100000 | Total steps for full blind travel |
 
 ### Normal Operation
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `run_current` | 1000mA | Motor current during movement |
-| `hold_current` | 400mA | Motor current when stationary |
-| `speed` | 800 steps/s | Motor speed |
+| Parameter | Default | Min | Max | Description |
+|-----------|---------|-----|-----|-------------|
+| `run_current` | 1000mA | 100mA | 2000mA | Motor current during movement |
+| `hold_current` | 400mA | 0mA | 1000mA | Motor current when stationary (0 = disabled) |
+| `speed` | 800 steps/s | 100 | 2000 | Motor speed |
 
 ### Homing Operation (Gentle)
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `run_current` | 400mA | Reduced current for gentle homing |
-| `hold_current` | 200mA | Hold current during homing |
-| `speed` | 300 steps/s | Slower speed for reliable stall detection |
-| `SGTHRS` | 1 | StallGuard threshold (stall triggers when SG_RESULT < 2) |
+| Parameter | Default | Min | Max | Description |
+|-----------|---------|-----|-----|-------------|
+| `run_current` | 400mA | 100mA | 1000mA | Reduced current for gentle homing |
+| `hold_current` | 200mA | 0mA | 500mA | Hold current during homing |
+| `speed` | 300 steps/s | 50 | 500 | Slower speed for reliable stall detection |
+| `SGTHRS` | 1 | 0 | 255 | StallGuard threshold (stall triggers when SG_RESULT < 2×SGTHRS) |
 
 ## Usage
 

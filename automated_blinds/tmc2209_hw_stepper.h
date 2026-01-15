@@ -29,7 +29,7 @@ class TMC2209HWStepper {
     pinMode(diag_pin_, INPUT_PULLDOWN);
 
     digitalWrite(step_pin_, LOW);
-    digitalWrite(en_pin_, LOW);  // Enable driver
+    digitalWrite(en_pin_, LOW);  // Enable temporarily for configuration
 
     // Setup UART for TMC2209
     Serial2.begin(115200, SERIAL_8N1, uart_rx_, uart_tx_);
@@ -61,6 +61,10 @@ class TMC2209HWStepper {
 
     ESP_LOGI("tmc_hw", "StallGuard configured: SGTHRS=100, TCOOLTHRS=max");
 
+    // Disable driver after configuration - will enable when movement starts
+    digitalWrite(en_pin_, HIGH);
+    ESP_LOGI("tmc_hw", "Driver disabled for power saving - will enable on movement");
+
     // Setup hardware timer
     // New ESP32 Arduino 3.x API: timerBegin(frequency_hz)
     // 1MHz = 1µs resolution
@@ -81,7 +85,10 @@ class TMC2209HWStepper {
       uint16_t sg_now = driver_.SG_RESULT();
       bool diag_now = digitalRead(diag_pin_);
       ESP_LOGW("tmc_hw", "STALL DETECTED after %d steps! DIAG=%d SG_RESULT=%d", steps_since_start_, diag_now, sg_now);
-      stop();
+      stopTimer();
+      is_running_ = false;
+      target_position_ = current_position_;
+      disable();  // Cut power after stall
       has_stalled_ = true;
       if (on_stall_callback_) {
         on_stall_callback_();
@@ -104,6 +111,7 @@ class TMC2209HWStepper {
     if (is_running_ && current_position_ == target_position_) {
       stopTimer();
       is_running_ = false;
+      disable();  // Cut power to motor when idle
       ESP_LOGD("tmc_hw", "Reached target position: %d", current_position_);
     }
   }
@@ -115,9 +123,12 @@ class TMC2209HWStepper {
       return;
     }
 
-    // Set direction
+    // Enable driver before movement
+    enable();
+
+    // Set direction (inverted: positive steps = DIR LOW)
     direction_ = (target_position_ > current_position_) ? 1 : -1;
-    digitalWrite(dir_pin_, direction_ > 0 ? HIGH : LOW);
+    digitalWrite(dir_pin_, direction_ > 0 ? LOW : HIGH);
 
     // Debug: Check DIAG state BEFORE movement
     bool diag_before = digitalRead(diag_pin_);
@@ -140,6 +151,7 @@ class TMC2209HWStepper {
     stopTimer();
     is_running_ = false;
     target_position_ = current_position_;
+    disable();  // Cut power to motor
   }
 
   void report_position(int32_t pos) {
@@ -149,6 +161,18 @@ class TMC2209HWStepper {
 
   bool is_running() { return is_running_; }
   bool has_stalled() { return has_stalled_; }
+
+  // Power management - disable driver when not moving to save power
+  void enable() {
+    digitalWrite(en_pin_, LOW);  // EN is active LOW
+    delay(1);  // Brief delay for driver to wake up
+    ESP_LOGD("tmc_hw", "Driver ENABLED");
+  }
+
+  void disable() {
+    digitalWrite(en_pin_, HIGH);  // EN is active LOW, so HIGH = disabled
+    ESP_LOGD("tmc_hw", "Driver DISABLED (power saving)");
+  }
 
   void enable_stall_detection(bool enable) {
     stall_detection_enabled_ = enable;

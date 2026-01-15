@@ -1,0 +1,34 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(esphome run:*)",
+      "Bash(esphome config:*)",
+      "Bash(esphome compile:*)",
+      "Bash(esphome upload:*)",
+      "Bash(timeout 15 esphome logs:*)",
+      "Bash(timeout 10 esphome:*)",
+      "Bash(timeout 20 esphome logs:*)",
+      "Bash(python3:*)",
+      "Bash(timeout 30 esphome logs:*)",
+      "Bash(ping:*)",
+      "Bash(timeout 60 esphome logs:*)",
+      "Bash(timeout 45 esphome logs:*)",
+      "Bash(timeout 40 esphome logs:*)",
+      "Bash(timeout 35 esphome logs:*)",
+      "Bash(timeout 25 esphome:*)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:community.home-assistant.io)",
+      "WebFetch(domain:www.analog.com)",
+      "WebFetch(domain:deepwiki.com)",
+      "Bash(arduino-cli compile:*)",
+      "Bash(ls:*)",
+      "Bash(arduino-cli upload:*)",
+      "Bash(timeout 30 arduino-cli monitor:*)",
+      "Bash(esptool.py:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)"
+    ]
+  }
+}
