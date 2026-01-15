@@ -1,0 +1,190 @@
+# Hardware Timer StallGuard Test
+# Uses ESP32 hardware timer for precise step generation
+
+esphome:
+  name: blind-hw-test
+  includes:
+    - tmc2209_hw_stepper.h
+  libraries:
+    - "TMCStepper"
+  on_boot:
+    priority: 600.0  # Very early to setup hardware
+    then:
+      - lambda: |-
+          // Initialize stepper (uses global g_stepper from header)
+          static TMC2209HWStepper stepper_instance(27, 14, 13, 25, 23, 22);
+          g_stepper = &stepper_instance;
+          g_stepper->setup();
+      - delay: 500ms
+      - lambda: |-
+          // Configure after setup
+          if (g_stepper) {
+            g_stepper->set_speed(800);  // 800 steps/s
+            g_stepper->set_current(600, 300);  // 600mA run, 300mA hold
+            g_stepper->set_stall_threshold(1);  // Very low - DIAG triggers when SG < 2
+            ESP_LOGI("main", "Stepper configured - SGTHRS=1 (stall when SG<2)");
+          }
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+logger:
+  baud_rate: 0  # Disable logging on Serial (we use Serial2 for TMC)
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+api:
+
+ota:
+  platform: esphome
+
+web_server:
+  port: 80
+
+globals:
+  - id: test_target
+    type: int
+    initial_value: '0'
+
+interval:
+  - interval: 50ms
+    then:
+      - lambda: |-
+          // Call loop to process stall detection
+          if (g_stepper != nullptr) {
+            g_stepper->loop();
+          }
+
+button:
+  - platform: template
+    name: "Move Forward 2000"
+    on_press:
+      - lambda: |-
+          if (!g_stepper) return;
+          id(test_target) += 2000;
+          g_stepper->set_target(id(test_target));
+          ESP_LOGI("main", "Moving to %d", id(test_target));
+
+  - platform: template
+    name: "Move Back 2000"
+    on_press:
+      - lambda: |-
+          if (!g_stepper) return;
+          id(test_target) -= 2000;
+          g_stepper->set_target(id(test_target));
+          ESP_LOGI("main", "Moving to %d", id(test_target));
+
+  - platform: template
+    name: "Home (to 0)"
+    on_press:
+      - lambda: |-
+          if (!g_stepper) return;
+          id(test_target) = 0;
+          g_stepper->set_target(0);
+          ESP_LOGI("main", "Homing to 0");
+
+  - platform: template
+    name: "Stop"
+    on_press:
+      - lambda: |-
+          if (!g_stepper) return;
+          g_stepper->stop();
+          ESP_LOGI("main", "Stopped");
+
+  - platform: template
+    name: "Read SG_RESULT"
+    on_press:
+      - lambda: |-
+          if (!g_stepper) return;
+          uint16_t sg = g_stepper->get_sg_result();
+          ESP_LOGW("sg", "SG_RESULT = %d", sg);
+
+  - platform: template
+    name: "Dump Registers"
+    on_press:
+      - lambda: |-
+          if (!g_stepper) return;
+          g_stepper->dump_registers();
+
+  - platform: template
+    name: "Set Speed 400"
+    on_press:
+      - lambda: |-
+          if (!g_stepper) return;
+          g_stepper->set_speed(400);
+          ESP_LOGI("main", "Speed set to 400 steps/s");
+
+  - platform: template
+    name: "Set Speed 800"
+    on_press:
+      - lambda: |-
+          if (!g_stepper) return;
+          g_stepper->set_speed(800);
+          ESP_LOGI("main", "Speed set to 800 steps/s");
+
+  - platform: template
+    name: "Set SGTHRS 50"
+    on_press:
+      - lambda: |-
+          if (!g_stepper) return;
+          g_stepper->set_stall_threshold(50);
+
+  - platform: template
+    name: "Set SGTHRS 100"
+    on_press:
+      - lambda: |-
+          if (!g_stepper) return;
+          g_stepper->set_stall_threshold(100);
+
+  - platform: template
+    name: "Set Current 400mA"
+    on_press:
+      - lambda: |-
+          if (!g_stepper) return;
+          g_stepper->set_current(400, 200);
+
+  - platform: template
+    name: "Set Current 800mA"
+    on_press:
+      - lambda: |-
+          if (!g_stepper) return;
+          g_stepper->set_current(800, 400);
+
+  - platform: template
+    name: "Disable Stall Detection"
+    on_press:
+      - lambda: |-
+          if (!g_stepper) return;
+          g_stepper->enable_stall_detection(false);
+
+  - platform: template
+    name: "Enable Stall Detection"
+    on_press:
+      - lambda: |-
+          if (!g_stepper) return;
+          g_stepper->enable_stall_detection(true);
+
+sensor:
+  - platform: template
+    name: "Stepper Position"
+    lambda: |-
+      if (!g_stepper) return 0;
+      return g_stepper->current_position;
+    update_interval: 500ms
+
+binary_sensor:
+  - platform: template
+    name: "Motor Running"
+    lambda: |-
+      if (!g_stepper) return false;
+      return g_stepper->is_running();
+
+  - platform: template
+    name: "Stall Detected"
+    lambda: |-
+      if (!g_stepper) return false;
+      return g_stepper->has_stalled();
