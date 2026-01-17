@@ -100,21 +100,68 @@ The 500-step warmup period (in `tmc2209_hw_stepper.h`) is equally important - it
 
 ## Installation
 
+### Single Blind Setup
+
 1. Copy `automated_blinds_esphome.yaml` and `tmc2209_hw_stepper.h` to your ESPHome config directory
 2. Create a `secrets.yaml` with your Wi-Fi credentials:
    ```yaml
    wifi_ssid: "YourNetworkName"
    wifi_password: "YourPassword"
    ```
-3. Compile and upload: `esphome run automated_blinds_esphome.yaml`
+3. Edit the substitutions at the top of the YAML to match your setup
+4. Compile and upload: `esphome run automated_blinds_esphome.yaml`
+
+### Multi-Blind Setup (Production)
+
+For managing multiple blinds, use the `production/` directory which uses ESPHome packages to share common configuration:
+
+```
+production/
+├── blind_base.yaml      # Shared config (all common code)
+├── blind-right-1.yaml   # Per-blind settings only
+├── blind-right-2.yaml
+├── blind-right-3.yaml
+├── blind-left-1.yaml
+├── blind-left-2.yaml
+├── deploy.sh            # Parallel deployment script
+└── secrets.yaml         # Wi-Fi credentials (symlink)
+```
+
+**Per-blind config** (e.g., `blind-right-1.yaml`) contains only the settings that differ:
+```yaml
+substitutions:
+  device_name: blind-right-1
+  blind_max_steps: "14000"  # Adjust per blind
+  # ... other settings
+
+packages:
+  base: !include blind_base.yaml
+```
+
+**Deployment commands:**
+```bash
+cd production
+
+# Deploy all blinds in parallel (compile + OTA upload)
+./deploy.sh
+
+# Compile only (no upload)
+./deploy.sh compile
+
+# Deploy specific blinds only
+./deploy.sh blind-right-1 blind-left-2
+```
 
 ## Files
 
 | File | Description |
 |------|-------------|
-| `automated_blinds_esphome.yaml` | Main ESPHome configuration |
+| `automated_blinds_esphome.yaml` | Standalone single-blind configuration |
 | `tmc2209_hw_stepper.h` | Custom C++ stepper driver with hardware timer and StallGuard |
 | `hw_timer_test.yaml` | Test configuration for debugging StallGuard |
+| `production/blind_base.yaml` | Shared base config for multi-blind setup |
+| `production/blind-*.yaml` | Per-blind configuration overrides |
+| `production/deploy.sh` | Parallel deployment script for all blinds |
 
 ---
 

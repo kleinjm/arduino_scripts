@@ -1,0 +1,25 @@
+# Blind Right 2
+substitutions:
+  device_name: blind-right-2
+  blind_max_steps: "14000"  # Adjust for this blind
+
+  # Normal Operation
+  run_current: "2000"
+  hold_current: "0"
+  normal_speed: "2000"
+
+  # Homing
+  homing_current: "2000"
+  homing_speed: "300"
+  homing_stall_threshold: "1"
+
+  # Pins (same for all blinds)
+  pin_step: "27"
+  pin_dir: "14"
+  pin_enable: "13"
+  pin_diag: "25"
+  pin_uart_rx: "23"
+  pin_uart_tx: "22"
+
+packages:
+  base: !include blind_base.yaml

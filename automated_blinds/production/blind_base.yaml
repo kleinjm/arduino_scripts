@@ -1,48 +1,16 @@
-# Automated Blinds - ESPHome with Hardware Timer StallGuard
-# Uses custom TMC2209 driver with ESP32 hardware timer for reliable stall detection
-
-#==============================================================================
-# CONFIGURATION - Adjust these values for your setup
-#==============================================================================
-substitutions:
-  device_name: blind-right-1
-
-  # Movement Range
-  blind_max_steps: "15000"        # Total steps for full blind travel (1000-100000)
-
-  # Normal Operation
-  run_current: "2000"             # Motor current in mA during movement (100-2000)
-  hold_current: "0"             # Motor current in mA when stationary (0-1000)
-  normal_speed: "2000"             # Motor speed in steps/s (100-2000)
-
-  # Homing Operation
-  homing_current: "2000"          # Current in mA for homing (100-2000)
-  homing_speed: "300"             # Slower speed for reliable stall detection (50-500)
-  homing_stall_threshold: "1"     # SGTHRS value (0-255), stall when SG_RESULT < 2×SGTHRS
-
-  # Pin Configuration
-  pin_step: "27"
-  pin_dir: "14"
-  pin_enable: "13"
-  pin_diag: "25"
-  pin_uart_rx: "23"
-  pin_uart_tx: "22"
-
-#==============================================================================
-# END CONFIGURATION - Do not modify below unless you know what you're doing
-#==============================================================================
+# Automated Blinds - Base Configuration
+# This file contains all common code. Per-blind configs override substitutions.
 
 esphome:
   name: ${device_name}
   includes:
-    - tmc2209_hw_stepper.h
+    - ../tmc2209_hw_stepper.h
   libraries:
     - "TMCStepper"
   on_boot:
     priority: 600.0
     then:
       - lambda: |-
-          // Initialize stepper with pins: STEP, DIR, EN, DIAG, RX, TX
           static TMC2209HWStepper stepper_instance(${pin_step}, ${pin_dir}, ${pin_enable}, ${pin_diag}, ${pin_uart_rx}, ${pin_uart_tx});
           g_stepper = &stepper_instance;
           g_stepper->setup();
@@ -61,7 +29,7 @@ esp32:
     type: arduino
 
 logger:
-  baud_rate: 0  # Disable UART logging - Serial2 used for TMC
+  baud_rate: 0
 
 wifi:
   ssid: !secret wifi_ssid
@@ -84,7 +52,6 @@ globals:
     type: bool
     initial_value: 'false'
 
-# Process stall detection in main loop
 interval:
   - interval: 50ms
     then:
@@ -92,7 +59,6 @@ interval:
           if (g_stepper != nullptr) {
             g_stepper->loop();
           }
-      # Check if homing stall occurred
       - if:
           condition:
             lambda: 'return id(is_homing) && g_stepper && g_stepper->has_stalled();'
@@ -100,9 +66,8 @@ interval:
             - logger.log: "Homing stall detected - setting home position"
             - lambda: |-
                 g_stepper->report_position(0);
-                g_stepper->enable_stall_detection(false);  // Disable until next homing
+                g_stepper->enable_stall_detection(false);
                 id(is_homing) = false;
-            # Restore normal current after homing
             - lambda: |-
                 g_stepper->set_current(${run_current}, ${hold_current});
                 g_stepper->set_speed(${normal_speed});
@@ -114,13 +79,11 @@ button:
     on_press:
       - logger.log: "Homing with StallGuard..."
       - lambda: 'id(is_homing) = true;'
-      # Set current and speed for homing
       - lambda: |-
           if (!g_stepper) return;
           g_stepper->set_current(${homing_current}, 0);
           g_stepper->set_speed(${homing_speed});
           g_stepper->enable_stall_detection(true);
-          // Move toward closed (negative direction) - more than full travel to ensure we hit stop
           g_stepper->set_target(-${blind_max_steps} - 10000);
           ESP_LOGI("main", "Homing started - moving toward closed");
 
@@ -190,7 +153,6 @@ sensor:
       int pos = g_stepper->current_position;
       if (pos < 0) pos = 0;
       if (pos > id(blind_max_steps)) pos = id(blind_max_steps);
-      // 0 = closed (0%), max_steps = open (100%)
       return (float)pos / id(blind_max_steps) * 100.0;
     update_interval: 500ms
     unit_of_measurement: "%"
