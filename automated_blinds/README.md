@@ -56,24 +56,41 @@ The following values in `automated_blinds_esphome.yaml` can be adjusted for your
 
 | Parameter | Default | Min | Max | Description |
 |-----------|---------|-----|-----|-------------|
-| `blind_max_steps` | 20000 | 1000 | 100000 | Total steps for full blind travel |
+| `blind_max_steps` | 14000 | 1000 | 100000 | Total steps for full blind travel |
 
 ### Normal Operation
 
 | Parameter | Default | Min | Max | Description |
 |-----------|---------|-----|-----|-------------|
-| `run_current` | 1000mA | 100mA | 2000mA | Motor current during movement |
-| `hold_current` | 400mA | 0mA | 1000mA | Motor current when stationary (0 = disabled) |
+| `run_current` | 2000mA | 100mA | 2000mA | Motor current during movement |
+| `hold_current` | 0mA | 0mA | 1000mA | Motor current when stationary (0 = disabled) |
 | `speed` | 800 steps/s | 100 | 2000 | Motor speed |
 
-### Homing Operation (Gentle)
+### Homing Operation
 
 | Parameter | Default | Min | Max | Description |
 |-----------|---------|-----|-----|-------------|
-| `run_current` | 400mA | 100mA | 1000mA | Reduced current for gentle homing |
-| `hold_current` | 200mA | 0mA | 500mA | Hold current during homing |
-| `speed` | 300 steps/s | 50 | 500 | Slower speed for reliable stall detection |
+| `homing_current` | 2000mA | 100mA | 2000mA | Motor current during homing |
+| `homing_speed` | 300 steps/s | 50 | 500 | Slower speed for reliable stall detection |
 | `SGTHRS` | 1 | 0 | 255 | StallGuard threshold (stall triggers when SG_RESULT < 2×SGTHRS) |
+
+### SGTHRS Tuning Guide
+
+The `SGTHRS` value of **1 is optimal** for most setups. During testing, normal operation produced SG_RESULT values of 22-86, while actual stalls produced 0-2. This gives a clear gap for reliable detection.
+
+| SGTHRS | Stall triggers when | Risk Level |
+|--------|---------------------|------------|
+| 1 (recommended) | SG_RESULT < 2 | None - big gap from normal operation |
+| 2-5 | SG_RESULT < 4-10 | Low - slightly more sensitive |
+| 10 | SG_RESULT < 20 | Medium - may false trigger (normal can dip to ~22) |
+| 50+ | SG_RESULT < 100+ | High - will cause false triggers |
+
+**When to adjust:**
+- **Decrease to 0**: Disables DIAG-based stall detection entirely
+- **Increase to 2-5**: More sensitive, catches stalls earlier, but risks false triggers under varying load
+- **Leave at 1**: Recommended for blinds with consistent load
+
+The 500-step warmup period (in `tmc2209_hw_stepper.h`) is equally important - it lets StallGuard stabilize before checking for stalls.
 
 ## Usage
 
