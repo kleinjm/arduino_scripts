@@ -1,7 +1,7 @@
 # Blind Right 1
 substitutions:
   device_name: blind-right-1
-  blind_max_steps: "14000"
+  blind_max_steps: "15200"
 
   # Normal Operation
   run_current: "2000"
