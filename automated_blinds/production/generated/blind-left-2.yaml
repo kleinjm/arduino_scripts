@@ -1,0 +1,378 @@
+substitutions:
+  device_name: blind-left-2
+  blind_max_steps: '14000'
+  run_current: '2000'
+  hold_current: '0'
+  normal_speed: '2000'
+  homing_current: '2000'
+  homing_speed: '300'
+  homing_stall_threshold: '1'
+  pin_step: '27'
+  pin_dir: '14'
+  pin_enable: '13'
+  pin_diag: '25'
+  pin_uart_rx: '23'
+  pin_uart_tx: '22'
+  light_sensor_pin: '34'
+esphome:
+  name: blind-left-2
+  includes:
+    - tmc2209_hw_stepper.h
+  libraries:
+    - TMCStepper
+  on_boot:
+    - priority: 600.0
+      then:
+        - lambda: !lambda |-
+            static TMC2209HWStepper stepper_instance(27, 14, 13, 25, 23, 22);
+            g_stepper = &stepper_instance;
+            g_stepper->setup();
+        - delay: 500ms
+        - lambda: !lambda |-
+            if (g_stepper) {
+              g_stepper->set_speed(2000);
+              g_stepper->set_current(2000, 0);
+              g_stepper->set_stall_threshold(1);
+              ESP_LOGI("main", "Stepper ready - StallGuard enabled");
+            }
+  min_version: 2025.12.5
+  build_path: build/blind-left-2
+  friendly_name: ''
+  platformio_options: {}
+  environment_variables: {}
+  includes_c: []
+  name_add_mac_suffix: false
+  debug_scheduler: false
+  areas: []
+  devices: []
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+    version: 3.3.2
+    sdkconfig_options: {}
+    log_level: ERROR
+    advanced:
+      compiler_optimization: SIZE
+      enable_idf_experimental_features: false
+      enable_lwip_assert: true
+      ignore_efuse_custom_mac: false
+      ignore_efuse_mac_crc: false
+      enable_lwip_mdns_queries: true
+      enable_lwip_bridge_interface: false
+      enable_lwip_tcpip_core_locking: true
+      enable_lwip_check_thread_safety: true
+      disable_libc_locks_in_iram: true
+      disable_vfs_support_termios: true
+      disable_vfs_support_select: true
+      disable_vfs_support_dir: true
+      freertos_in_iram: false
+      ringbuf_in_iram: false
+      execute_from_psram: false
+      loop_task_stack_size: 8192
+    components: []
+    platform_version: https://github.com/pioarduino/platform-espressif32/releases/download/55.03.31-2/platform-espressif32.zip
+    source: pioarduino/framework-arduinoespressif32@https://github.com/espressif/arduino-esp32/releases/download/3.3.2/esp32-3.3.2.zip
+  flash_size: 4MB
+  variant: ESP32
+  cpu_frequency: 160MHZ
+logger:
+  baud_rate: 0
+  tx_buffer_size: 512
+  deassert_rts_dtr: false
+  task_log_buffer_size: 768
+  hardware_uart: UART0
+  level: DEBUG
+  logs: {}
+  runtime_tag_levels: false
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  power_save_mode: NONE
+
+api:
+  port: 6053
+  password: \033[5m''\033[6m
+  reboot_timeout: 15min
+  batch_delay: 100ms
+  custom_services: false
+  homeassistant_services: false
+  homeassistant_states: false
+  listen_backlog: 4
+  max_connections: 8
+  max_send_queue: 8
+ota:
+  - platform: esphome
+    version: 2
+    port: 3232
+web_server:
+  port: 80
+  version: 2
+  enable_private_network_access: true
+  include_internal: false
+  log: true
+  css_url: ''
+  js_url: https://oi.esphome.io/v2/www.js
+globals:
+  - id: blind_max_steps
+    type: int
+    initial_value: '14000'
+    restore_value: false
+  - id: is_homing
+    type: bool
+    initial_value: 'false'
+    restore_value: false
+  - id: last_cover_position
+    type: float
+    initial_value: '0.0'
+    restore_value: false
+interval:
+  - interval: 50ms
+    then:
+      - lambda: !lambda |-
+          if (g_stepper != nullptr) {
+            g_stepper->loop();
+          }
+      - if:
+          condition:
+            lambda: !lambda |-
+              return id(is_homing) && g_stepper && g_stepper->has_stalled();
+          then:
+            - logger.log:
+                format: Homing stall detected - setting home position
+                args: []
+                tag: main
+                level: DEBUG
+            - lambda: !lambda |-
+                g_stepper->report_position(0);
+                g_stepper->enable_stall_detection(false);
+                id(is_homing) = false;
+            - lambda: !lambda |-
+                g_stepper->set_current(2000, 0);
+                g_stepper->set_speed(2000);
+            - logger.log:
+                format: Homing complete - restored normal settings
+                args: []
+                tag: main
+                level: DEBUG
+    startup_delay: 0s
+  - interval: 500ms
+    then:
+      - lambda: !lambda |-
+          if (!g_stepper) return;
+          int pos = g_stepper->current_position;
+          if (pos < 0) pos = 0;
+          if (pos > id(blind_max_steps)) pos = id(blind_max_steps);
+          float pct = (float)pos / id(blind_max_steps);
+          // Only update if position changed by more than 1%
+          if (abs(pct - id(last_cover_position)) > 0.01 || (pct == 0 && id(last_cover_position) != 0) || (pct == 1.0 && id(last_cover_position) != 1.0)) {
+            id(last_cover_position) = pct;
+            id(blind_cover).position = pct;
+            id(blind_cover).publish_state();
+          }
+    startup_delay: 0s
+button:
+  - platform: template
+    name: Home (Close Fully)
+    on_press:
+      - then:
+          - logger.log:
+              format: Homing with StallGuard...
+              args: []
+              tag: main
+              level: DEBUG
+          - lambda: !lambda |-
+              id(is_homing) = true;
+          - lambda: !lambda |-
+              if (!g_stepper) return;
+              g_stepper->set_current(2000, 0);
+              g_stepper->set_speed(300);
+              g_stepper->enable_stall_detection(true);
+              g_stepper->set_target(-14000 - 10000);
+              ESP_LOGI("main", "Homing started - moving toward closed");
+    disabled_by_default: false
+  - platform: template
+    name: Open Fully
+    on_press:
+      - then:
+          - logger.log:
+              format: Opening blinds...
+              args: []
+              tag: main
+              level: DEBUG
+          - lambda: !lambda |-
+              if (!g_stepper) return;
+              g_stepper->set_target(id(blind_max_steps));
+    disabled_by_default: false
+  - platform: template
+    name: Close Fully
+    on_press:
+      - then:
+          - logger.log:
+              format: Closing blinds...
+              args: []
+              tag: main
+              level: DEBUG
+          - lambda: !lambda |-
+              if (!g_stepper) return;
+              g_stepper->set_target(0);
+    disabled_by_default: false
+  - platform: template
+    name: Stop
+    on_press:
+      - then:
+          - lambda: !lambda |-
+              if (!g_stepper) return;
+              g_stepper->stop();
+              id(is_homing) = false;
+          - logger.log:
+              format: Motor stopped
+              args: []
+              tag: main
+              level: DEBUG
+    disabled_by_default: false
+  - platform: template
+    name: Open 50%
+    on_press:
+      - then:
+          - lambda: !lambda |-
+              if (!g_stepper) return;
+              g_stepper->set_target(id(blind_max_steps) / 2);
+    disabled_by_default: false
+  - platform: template
+    name: Step Open (+500)
+    on_press:
+      - then:
+          - lambda: !lambda |-
+              if (!g_stepper) return;
+              int target = g_stepper->current_position + 500;
+              if (target > id(blind_max_steps)) target = id(blind_max_steps);
+              g_stepper->set_target(target);
+    disabled_by_default: false
+  - platform: template
+    name: Step Close (-500)
+    on_press:
+      - then:
+          - lambda: !lambda |-
+              if (!g_stepper) return;
+              int target = g_stepper->current_position - 500;
+              if (target < 0) target = 0;
+              g_stepper->set_target(target);
+    disabled_by_default: false
+  - platform: template
+    name: Set Home (Position = 0)
+    on_press:
+      - then:
+          - logger.log:
+              format: Manually setting current position as home (0)
+              args: []
+              tag: main
+              level: DEBUG
+          - lambda: !lambda |-
+              if (!g_stepper) return;
+              g_stepper->stop();
+              g_stepper->report_position(0);
+              id(is_homing) = false;
+    disabled_by_default: false
+sensor:
+  - platform: template
+    name: Blind Position
+    lambda: !lambda |-
+      if (!g_stepper) return 0;
+      return g_stepper->current_position;
+    update_interval: 500ms
+    unit_of_measurement: steps
+    disabled_by_default: false
+    force_update: false
+    accuracy_decimals: 1
+  - platform: template
+    name: Blind Position %
+    lambda: !lambda |-
+      if (!g_stepper) return 0;
+      int pos = g_stepper->current_position;
+      if (pos < 0) pos = 0;
+      if (pos > id(blind_max_steps)) pos = id(blind_max_steps);
+      return (float)pos / id(blind_max_steps) * 100.0;
+    update_interval: 500ms
+    unit_of_measurement: '%'
+    disabled_by_default: false
+    force_update: false
+    accuracy_decimals: 1
+  - platform: adc
+    pin:
+      number: 34
+      mode:
+        input: true
+        output: false
+        open_drain: false
+        pullup: false
+        pulldown: false
+      inverted: false
+      ignore_pin_validation_error: false
+      ignore_strapping_warning: false
+      drive_strength: 20.0
+    name: Light Level
+    id: light_level
+    update_interval: 5s
+    unit_of_measurement: '%'
+    accuracy_decimals: 0
+    attenuation: 12db
+    filters:
+      - multiply: 100.0
+      - sliding_window_moving_average:
+          window_size: 5
+          send_every: 1
+          send_first_at: 1
+    disabled_by_default: false
+    force_update: false
+    device_class: voltage
+    state_class: measurement
+    raw: false
+    samples: 1
+    sampling_mode: avg
+binary_sensor:
+  - platform: template
+    name: Blind Motor Running
+    lambda: !lambda |-
+      if (!g_stepper) return false;
+      return g_stepper->is_running();
+    disabled_by_default: false
+  - platform: template
+    name: Blind Stall Detected
+    lambda: !lambda |-
+      if (!g_stepper) return false;
+      return g_stepper->has_stalled();
+    disabled_by_default: false
+cover:
+  - platform: template
+    name: Blind
+    id: blind_cover
+    device_class: blind
+    has_position: true
+    position_action:
+      then:
+        - lambda: !lambda |-
+            if (!g_stepper) return;
+            int target = (int)(pos * id(blind_max_steps));
+            g_stepper->set_target(target);
+    open_action:
+      then:
+        - lambda: !lambda |-
+            if (!g_stepper) return;
+            g_stepper->set_target(id(blind_max_steps));
+    close_action:
+      then:
+        - lambda: !lambda |-
+            if (!g_stepper) return;
+            g_stepper->set_target(0);
+    stop_action:
+      then:
+        - lambda: !lambda |-
+            if (!g_stepper) return;
+            g_stepper->stop();
+            id(is_homing) = false;
+    disabled_by_default: false
+    optimistic: false
+    assumed_state: false
+    restore_mode: RESTORE
+

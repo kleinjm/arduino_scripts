@@ -4,7 +4,7 @@
 esphome:
   name: ${device_name}
   includes:
-    - ../tmc2209_hw_stepper.h
+    - tmc2209_hw_stepper.h
   libraries:
     - "TMCStepper"
   on_boot:
@@ -51,6 +51,9 @@ globals:
   - id: is_homing
     type: bool
     initial_value: 'false'
+  - id: last_cover_position
+    type: float
+    initial_value: '0.0'
 
 interval:
   - interval: 50ms
@@ -72,6 +75,21 @@ interval:
                 g_stepper->set_current(${run_current}, ${hold_current});
                 g_stepper->set_speed(${normal_speed});
             - logger.log: "Homing complete - restored normal settings"
+
+  - interval: 500ms
+    then:
+      - lambda: |-
+          if (!g_stepper) return;
+          int pos = g_stepper->current_position;
+          if (pos < 0) pos = 0;
+          if (pos > id(blind_max_steps)) pos = id(blind_max_steps);
+          float pct = (float)pos / id(blind_max_steps);
+          // Only update if position changed by more than 1%
+          if (abs(pct - id(last_cover_position)) > 0.01 || (pct == 0 && id(last_cover_position) != 0) || (pct == 1.0 && id(last_cover_position) != 1.0)) {
+            id(last_cover_position) = pct;
+            id(blind_cover).position = pct;
+            id(blind_cover).publish_state();
+          }
 
 button:
   - platform: template
@@ -137,6 +155,21 @@ button:
           if (target < 0) target = 0;
           g_stepper->set_target(target);
 
+  - platform: template
+    name: "Set Home (Position = 0)"
+    on_press:
+      - logger.log: "Manually setting current position as home (0)"
+      - lambda: |-
+          if (!g_stepper) return;
+          g_stepper->stop();
+          g_stepper->report_position(0);
+          g_stepper->enable_stall_detection(false);
+          id(is_homing) = false;
+      - lambda: |-
+          g_stepper->set_current(${run_current}, ${hold_current});
+          g_stepper->set_speed(${normal_speed});
+      - logger.log: "Restored normal operation settings"
+
 sensor:
   - platform: template
     name: "Blind Position"
@@ -169,3 +202,28 @@ binary_sensor:
     lambda: |-
       if (!g_stepper) return false;
       return g_stepper->has_stalled();
+
+cover:
+  - platform: template
+    name: "Blind"
+    id: blind_cover
+    device_class: blind
+    has_position: true
+    position_action:
+      - lambda: |-
+          if (!g_stepper) return;
+          int target = (int)(pos * id(blind_max_steps));
+          g_stepper->set_target(target);
+    open_action:
+      - lambda: |-
+          if (!g_stepper) return;
+          g_stepper->set_target(id(blind_max_steps));
+    close_action:
+      - lambda: |-
+          if (!g_stepper) return;
+          g_stepper->set_target(0);
+    stop_action:
+      - lambda: |-
+          if (!g_stepper) return;
+          g_stepper->stop();
+          id(is_homing) = false;

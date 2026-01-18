@@ -30,7 +30,9 @@
       "Bash(git commit:*)",
       "Bash(git push:*)",
       "Bash(chmod:*)",
-      "Bash(ln:*)"
+      "Bash(ln:*)",
+      "Bash(./deploy.sh:*)",
+      "Bash(esphome logs:*)"
     ]
   }
 }

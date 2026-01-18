@@ -150,7 +150,15 @@ cd production
 
 # Deploy specific blinds only
 ./deploy.sh blind-right-1 blind-left-2
+
+# Generate resolved YAML files (packages merged into standalone configs)
+./deploy.sh generate
+
+# Generate specific blinds only
+./deploy.sh generate blind-right-1 blind-right-2
 ```
+
+Generated files are saved to `production/generated/` and can be used directly with ESPHome.
 
 ## Files
 

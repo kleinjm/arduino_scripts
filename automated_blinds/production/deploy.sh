@@ -4,6 +4,7 @@
 # Usage:
 #   ./deploy.sh              # Upload all blinds via OTA
 #   ./deploy.sh compile      # Compile only (no upload)
+#   ./deploy.sh generate     # Generate resolved YAML files to generated/
 #   ./deploy.sh blind-right-1 blind-left-2  # Upload specific blinds only
 
 set -e
@@ -22,11 +23,14 @@ ALL_BLINDS=(
 
 # Parse arguments
 COMPILE_ONLY=false
+GENERATE_ONLY=false
 SELECTED_BLINDS=()
 
 for arg in "$@"; do
   if [ "$arg" = "compile" ]; then
     COMPILE_ONLY=true
+  elif [ "$arg" = "generate" ]; then
+    GENERATE_ONLY=true
   else
     SELECTED_BLINDS+=("$arg")
   fi
@@ -41,8 +45,66 @@ echo "==================================="
 echo "Blind Deployment Script"
 echo "==================================="
 echo "Blinds: ${SELECTED_BLINDS[*]}"
-echo "Mode: $([ "$COMPILE_ONLY" = true ] && echo "Compile only" || echo "Compile + Upload")"
+if [ "$GENERATE_ONLY" = true ]; then
+  echo "Mode: Generate resolved YAML files"
+elif [ "$COMPILE_ONLY" = true ]; then
+  echo "Mode: Compile only"
+else
+  echo "Mode: Compile + Upload"
+fi
 echo ""
+
+# Handle generate mode
+if [ "$GENERATE_ONLY" = true ]; then
+  mkdir -p generated
+  for blind in "${SELECTED_BLINDS[@]}"; do
+    config="${blind}.yaml"
+    output="generated/${blind}.yaml"
+
+    if [ ! -f "$config" ]; then
+      echo "[$blind] ERROR: Config file not found: $config"
+      continue
+    fi
+
+    echo "[$blind] Generating resolved config..."
+    if esphome config "$config" 2>/dev/null | grep -v "^INFO" > "$output"; then
+      # Fix absolute paths to relative (for HA ESPHome compatibility)
+      sed -i '' 's|/Users/.*/production/||g' "$output"
+
+      # Replace verbose wifi section with simple version
+      python3 - "$output" << 'PYTHON_SCRIPT'
+import sys
+import re
+
+with open(sys.argv[1], 'r') as f:
+    content = f.read()
+
+# Replace wifi section (everything from 'wifi:' up to but not including 'api:')
+wifi_simple = """wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  power_save_mode: NONE
+
+"""
+content = re.sub(r'^wifi:.*?(?=^api:)', wifi_simple, content, flags=re.MULTILINE | re.DOTALL)
+
+with open(sys.argv[1], 'w') as f:
+    f.write(content)
+PYTHON_SCRIPT
+
+      echo "[$blind] Generated: $output"
+    else
+      echo "[$blind] FAILED to generate"
+    fi
+  done
+
+  echo ""
+  echo "==================================="
+  echo "Generated files in: $(pwd)/generated/"
+  ls -la generated/
+  echo "==================================="
+  exit 0
+fi
 
 # Function to deploy a single blind
 deploy_blind() {

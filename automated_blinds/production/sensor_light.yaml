@@ -1,0 +1,17 @@
+# Light Sensor Configuration
+# Include this in blinds that have a photoresistor connected
+
+sensor:
+  - platform: adc
+    pin: GPIO${light_sensor_pin}
+    name: "Light Level"
+    id: light_level
+    update_interval: 5s
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+    attenuation: 12db  # Full 0-3.3V range
+    filters:
+      - multiply: 100  # Convert 0-1 to 0-100%
+      - sliding_window_moving_average:
+          window_size: 5
+          send_every: 1

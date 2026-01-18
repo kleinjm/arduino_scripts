@@ -1,7 +1,7 @@
-# Blind Left 1
+# Blind Left 1 (with light sensor)
 substitutions:
   device_name: blind-left-1
-  blind_max_steps: "14000"  # Adjust for this blind
+  blind_max_steps: "23380"  # Adjust for this blind
 
   # Normal Operation
   run_current: "2000"
@@ -21,5 +21,9 @@ substitutions:
   pin_uart_rx: "23"
   pin_uart_tx: "22"
 
+  # Light sensor pin
+  light_sensor_pin: "34"
+
 packages:
   base: !include blind_base.yaml
+  light_sensor: !include sensor_light.yaml
