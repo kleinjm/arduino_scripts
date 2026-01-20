@@ -31,6 +31,7 @@ ESP32-based motorized blind controller using a TMC2209 stepper driver with UART 
 | GPIO14 | DIR | TMC2209 DIR |
 | GPIO13 | ENABLE | TMC2209 EN |
 | GPIO25 | DIAG | TMC2209 DIAG |
+| GPIO34 | Light Sensor (optional) | Photoresistor voltage divider |
 
 #### TMC2209 Pinout
 
