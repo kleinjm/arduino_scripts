@@ -17,7 +17,8 @@
       "Bash(esphome config:*)",
       "Bash(timeout 8 esphome logs:*)",
       "Bash(timeout 10 esphome logs:*)",
-      "Bash(timeout 15 esphome logs:*)"
+      "Bash(timeout 15 esphome logs:*)",
+      "Bash(gpg:*)"
     ]
   }
 }
