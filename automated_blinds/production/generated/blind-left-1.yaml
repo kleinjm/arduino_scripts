@@ -1,6 +1,6 @@
 substitutions:
   device_name: blind-left-1
-  blind_max_steps: '23300'
+  blind_max_steps: '23380'
   run_current: '2000'
   hold_current: '0'
   normal_speed: '2000'
@@ -116,7 +116,7 @@ web_server:
 globals:
   - id: blind_max_steps
     type: int
-    initial_value: '23300'
+    initial_value: '23380'
     restore_value: false
   - id: is_homing
     type: bool
@@ -188,7 +188,7 @@ button:
               g_stepper->set_current(2000, 0);
               g_stepper->set_speed(300);
               g_stepper->enable_stall_detection(true);
-              g_stepper->set_target(-23300 - 10000);
+              g_stepper->set_target(-23380 - 10000);
               ESP_LOGI("main", "Homing started - moving toward closed");
     disabled_by_default: false
   - platform: template
@@ -272,7 +272,16 @@ button:
               if (!g_stepper) return;
               g_stepper->stop();
               g_stepper->report_position(0);
+              g_stepper->enable_stall_detection(false);
               id(is_homing) = false;
+          - lambda: !lambda |-
+              g_stepper->set_current(2000, 0);
+              g_stepper->set_speed(2000);
+          - logger.log:
+              format: Restored normal operation settings
+              level: DEBUG
+              tag: main
+              args: []
     disabled_by_default: false
 sensor:
   - platform: template
@@ -316,16 +325,27 @@ sensor:
     update_interval: 5s
     unit_of_measurement: '%'
     accuracy_decimals: 0
+    device_class: ''
     attenuation: 12db
     filters:
       - multiply: 100.0
+      - calibrate_linear:
+          datapoints:
+            - from: 14.0
+              to: 0.0
+            - from: 100.0
+              to: 100.0
+          method: least_squares
+      - clamp:
+          min_value: 0.0
+          max_value: 100.0
+          ignore_out_of_range: false
       - sliding_window_moving_average:
           window_size: 5
           send_every: 1
           send_first_at: 1
     disabled_by_default: false
     force_update: false
-    device_class: voltage
     state_class: measurement
     raw: false
     samples: 1

@@ -9,6 +9,7 @@ sensor:
     update_interval: 5s
     unit_of_measurement: "%"
     accuracy_decimals: 0
+    device_class: ""  # Override ESPHome's default of 'voltage' for ADC sensors
     attenuation: 12db  # Full 0-3.3V range
     filters:
       - multiply: 100  # Convert 0-1 to 0-100%

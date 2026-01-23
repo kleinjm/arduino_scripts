@@ -1,12 +1,12 @@
 substitutions:
   device_name: blind-left-2
-  blind_max_steps: '14000'
+  blind_max_steps: '26000'
   run_current: '2000'
   hold_current: '0'
   normal_speed: '2000'
   homing_current: '2000'
   homing_speed: '300'
-  homing_stall_threshold: '1'
+  homing_stall_threshold: '5'
   pin_step: '27'
   pin_dir: '14'
   pin_enable: '13'
@@ -32,7 +32,7 @@ esphome:
             if (g_stepper) {
               g_stepper->set_speed(2000);
               g_stepper->set_current(2000, 0);
-              g_stepper->set_stall_threshold(1);
+              g_stepper->set_stall_threshold(5);
               ESP_LOGI("main", "Stepper ready - StallGuard enabled");
             }
   min_version: 2025.12.5
@@ -116,7 +116,7 @@ web_server:
 globals:
   - id: blind_max_steps
     type: int
-    initial_value: '14000'
+    initial_value: '26000'
     restore_value: false
   - id: is_homing
     type: bool
@@ -141,8 +141,8 @@ interval:
             - logger.log:
                 format: Homing stall detected - setting home position
                 args: []
-                tag: main
                 level: DEBUG
+                tag: main
             - lambda: !lambda |-
                 g_stepper->report_position(0);
                 g_stepper->enable_stall_detection(false);
@@ -153,8 +153,8 @@ interval:
             - logger.log:
                 format: Homing complete - restored normal settings
                 args: []
-                tag: main
                 level: DEBUG
+                tag: main
     startup_delay: 0s
   - interval: 500ms
     then:
@@ -179,8 +179,8 @@ button:
           - logger.log:
               format: Homing with StallGuard...
               args: []
-              tag: main
               level: DEBUG
+              tag: main
           - lambda: !lambda |-
               id(is_homing) = true;
           - lambda: !lambda |-
@@ -188,7 +188,7 @@ button:
               g_stepper->set_current(2000, 0);
               g_stepper->set_speed(300);
               g_stepper->enable_stall_detection(true);
-              g_stepper->set_target(-14000 - 10000);
+              g_stepper->set_target(-26000 - 10000);
               ESP_LOGI("main", "Homing started - moving toward closed");
     disabled_by_default: false
   - platform: template
@@ -198,8 +198,8 @@ button:
           - logger.log:
               format: Opening blinds...
               args: []
-              tag: main
               level: DEBUG
+              tag: main
           - lambda: !lambda |-
               if (!g_stepper) return;
               g_stepper->set_target(id(blind_max_steps));
@@ -211,8 +211,8 @@ button:
           - logger.log:
               format: Closing blinds...
               args: []
-              tag: main
               level: DEBUG
+              tag: main
           - lambda: !lambda |-
               if (!g_stepper) return;
               g_stepper->set_target(0);
@@ -228,8 +228,8 @@ button:
           - logger.log:
               format: Motor stopped
               args: []
-              tag: main
               level: DEBUG
+              tag: main
     disabled_by_default: false
   - platform: template
     name: Open 50%
@@ -266,13 +266,22 @@ button:
           - logger.log:
               format: Manually setting current position as home (0)
               args: []
-              tag: main
               level: DEBUG
+              tag: main
           - lambda: !lambda |-
               if (!g_stepper) return;
               g_stepper->stop();
               g_stepper->report_position(0);
+              g_stepper->enable_stall_detection(false);
               id(is_homing) = false;
+          - lambda: !lambda |-
+              g_stepper->set_current(2000, 0);
+              g_stepper->set_speed(2000);
+          - logger.log:
+              format: Restored normal operation settings
+              args: []
+              level: DEBUG
+              tag: main
     disabled_by_default: false
 sensor:
   - platform: template
@@ -316,16 +325,27 @@ sensor:
     update_interval: 5s
     unit_of_measurement: '%'
     accuracy_decimals: 0
+    device_class: ''
     attenuation: 12db
     filters:
       - multiply: 100.0
+      - calibrate_linear:
+          datapoints:
+            - from: 14.0
+              to: 0.0
+            - from: 100.0
+              to: 100.0
+          method: least_squares
+      - clamp:
+          min_value: 0.0
+          max_value: 100.0
+          ignore_out_of_range: false
       - sliding_window_moving_average:
           window_size: 5
           send_every: 1
           send_first_at: 1
     disabled_by_default: false
     force_update: false
-    device_class: voltage
     state_class: measurement
     raw: false
     samples: 1
