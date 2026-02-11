@@ -126,9 +126,11 @@ class TMC2209HWStepper {
     // Enable driver before movement
     enable();
 
-    // Set direction (inverted: positive steps = DIR LOW)
+    // Set direction (inverted: positive steps = DIR LOW, unless invert_direction_ is set)
     direction_ = (target_position_ > current_position_) ? 1 : -1;
-    digitalWrite(dir_pin_, direction_ > 0 ? LOW : HIGH);
+    bool dir_low = (direction_ > 0);
+    if (invert_direction_) dir_low = !dir_low;
+    digitalWrite(dir_pin_, dir_low ? LOW : HIGH);
 
     // Debug: Check DIAG state BEFORE movement
     bool diag_before = digitalRead(diag_pin_);
@@ -177,6 +179,11 @@ class TMC2209HWStepper {
   void enable_stall_detection(bool enable) {
     stall_detection_enabled_ = enable;
     ESP_LOGI("tmc_hw", "Stall detection %s", enable ? "ENABLED" : "DISABLED");
+  }
+
+  void set_invert_direction(bool invert) {
+    invert_direction_ = invert;
+    ESP_LOGI("tmc_hw", "Direction inversion %s", invert ? "ENABLED" : "DISABLED");
   }
 
   // Configuration methods
@@ -255,6 +262,7 @@ class TMC2209HWStepper {
   static const uint32_t WARMUP_STEPS = 500;  // Skip DIAG check for first 500 steps (~600ms)
   uint8_t sgthrs_ = 100;
   bool stall_detection_enabled_ = false;  // Only enable during homing
+  bool invert_direction_ = false;  // Invert motor direction
   std::function<void()> on_stall_callback_ = nullptr;
 
   // Static instance for ISR

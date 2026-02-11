@@ -10,7 +10,7 @@ substitutions:
 
   # Homing
   homing_current: "2000"
-  homing_speed: "300"
+  homing_speed: "335"
   homing_stall_threshold: "1"
 
   # Pins (same for all blinds)
@@ -23,3 +23,13 @@ substitutions:
 
 packages:
   base: !include blind_base.yaml
+
+# Invert direction for this blind
+esphome:
+  on_boot:
+    priority: 500.0
+    then:
+      - lambda: |-
+          if (g_stepper) {
+            g_stepper->set_invert_direction(true);
+          }

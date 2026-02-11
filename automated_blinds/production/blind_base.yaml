@@ -1,6 +1,9 @@
 # Automated Blinds - Base Configuration
 # This file contains all common code. Per-blind configs override substitutions.
 
+substitutions:
+  homing_timeout: "60"  # Default 60 seconds, override per-blind if needed
+
 esphome:
   name: ${device_name}
   includes:
@@ -51,6 +54,12 @@ globals:
   - id: is_homing
     type: bool
     initial_value: 'false'
+  - id: homing_start_time
+    type: uint32_t
+    initial_value: '0'
+  - id: homing_timeout_ms
+    type: uint32_t
+    initial_value: '${homing_timeout}000'  # Convert seconds to ms
   - id: last_cover_position
     type: float
     initial_value: '0.0'
@@ -75,6 +84,27 @@ interval:
                 g_stepper->set_current(${run_current}, ${hold_current});
                 g_stepper->set_speed(${normal_speed});
             - logger.log: "Homing complete - restored normal settings"
+      - if:
+          condition:
+            lambda: |-
+              return id(is_homing) &&
+                     id(homing_timeout_ms) > 0 &&
+                     (millis() - id(homing_start_time)) > id(homing_timeout_ms);
+          then:
+            - logger.log: "Homing timeout reached - setting home position"
+            - lambda: |-
+                if (g_stepper) {
+                  g_stepper->stop();
+                  g_stepper->report_position(0);
+                  g_stepper->enable_stall_detection(false);
+                }
+                id(is_homing) = false;
+            - lambda: |-
+                if (g_stepper) {
+                  g_stepper->set_current(${run_current}, ${hold_current});
+                  g_stepper->set_speed(${normal_speed});
+                }
+            - logger.log: "Homing complete (timeout) - restored normal settings"
 
   - interval: 500ms
     then:
@@ -96,14 +126,16 @@ button:
     name: "Home (Close Fully)"
     on_press:
       - logger.log: "Homing with StallGuard..."
-      - lambda: 'id(is_homing) = true;'
+      - lambda: |-
+          id(is_homing) = true;
+          id(homing_start_time) = millis();
       - lambda: |-
           if (!g_stepper) return;
           g_stepper->set_current(${homing_current}, 0);
           g_stepper->set_speed(${homing_speed});
           g_stepper->enable_stall_detection(true);
           g_stepper->set_target(-${blind_max_steps} - 10000);
-          ESP_LOGI("main", "Homing started - moving toward closed");
+          ESP_LOGI("main", "Homing started - moving toward closed (timeout: %ds)", ${homing_timeout});
 
   - platform: template
     name: "Open Fully"
