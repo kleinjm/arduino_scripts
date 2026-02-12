@@ -203,6 +203,22 @@ button:
       - logger.log: "Restored normal operation settings"
 
 sensor:
+  # Diagnostics for WiFi debugging
+  - platform: wifi_signal
+    name: "WiFi Signal"
+    update_interval: 30s
+
+  - platform: uptime
+    name: "Uptime"
+    update_interval: 60s
+
+  - platform: template
+    name: "Free Heap"
+    lambda: return ESP.getFreeHeap();
+    update_interval: 30s
+    unit_of_measurement: "bytes"
+    entity_category: diagnostic
+
   - platform: template
     name: "Blind Position"
     lambda: |-
